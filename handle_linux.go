@@ -52,6 +52,11 @@ type HandleOptions struct {
 	// does not need the VF information.
 	DisableVFInfoCollection bool
 
+	// DisableStatsCollection controls whether to fetch the statistics of each
+	// link: its IPv6 and VF statistics, and from Linux 6.19 also Statistics,
+	// which is then nil. They make up a large part of every link message.
+	DisableStatsCollection bool
+
 	// RetryInterrupted controls whether to automatically retry dump operations a
 	// number of times if they fail with EINTR before finally returning
 	// [ErrDumpInterrupted].
