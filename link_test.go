@@ -2397,6 +2397,54 @@ func TestLinkByIndex(t *testing.T) {
 	}
 }
 
+func TestLinkDisableStatsCollection(t *testing.T) {
+	minKernelRequired(t, 6, 19)
+	t.Cleanup(setUpNetlinkTest(t))
+
+	dummy := &Dummy{LinkAttrs{Name: "dummy"}}
+	if err := LinkAdd(dummy); err != nil {
+		t.Fatal(err)
+	}
+	if err := LinkSetAlias(dummy, "dummy-alias"); err != nil {
+		t.Fatal(err)
+	}
+	link, err := LinkByName("dummy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if link.Attrs().Statistics == nil {
+		t.Fatal("link has no statistics by default")
+	}
+
+	h, err := NewHandleWithOptions(HandleOptions{DisableStatsCollection: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+
+	byName, err := h.LinkByName("dummy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	byAlias, err := h.LinkByAlias("dummy-alias")
+	if err != nil {
+		t.Fatal(err)
+	}
+	byIndex, err := h.LinkByIndex(link.Attrs().Index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	links, err := h.LinkList()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range append([]Link{byName, byAlias, byIndex}, links...) {
+		if l.Attrs().Statistics != nil {
+			t.Errorf("link %s has statistics with DisableStatsCollection", l.Attrs().Name)
+		}
+	}
+}
+
 func TestOpenvSwitch(t *testing.T) {
 	skipUnlessRoot(t)
 	skipUnlessKModuleLoaded(t, "openvswitch")
