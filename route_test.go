@@ -1729,6 +1729,19 @@ func TestIP6tnlEncapDecode(t *testing.T) {
 	if !e.Equal(&got) {
 		t.Errorf("decoded %s, want %s", &got, e)
 	}
+
+	// Where 64-bit values must be aligned, the kernel puts a PAD attribute
+	// before the ID.
+	pad := make([]byte, 4)
+	native.PutUint16(pad, 4)
+	native.PutUint16(pad[2:], nl.LWTUNNEL_IP6_PAD)
+	got = IP6tnlEncap{}
+	if err := got.Decode(append(pad, buf...)); err != nil {
+		t.Fatalf("decode with PAD: %v", err)
+	}
+	if !e.Equal(&got) {
+		t.Errorf("decoded with PAD %s, want %s", &got, e)
+	}
 }
 
 func TestIP6tnlRouteAddDel(t *testing.T) {
