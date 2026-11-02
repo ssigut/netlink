@@ -686,8 +686,6 @@ func (e *IP6tnlEncap) Decode(buf []byte) error {
 			e.TC = attr.Value[0]
 		case nl.LWTUNNEL_IP6_FLAGS:
 			e.Flags = binary.BigEndian.Uint16(attr.Value[0:2])
-		case nl.LWTUNNEL_IP6_PAD:
-			err = fmt.Errorf("decoding PAD in IP6tnlEncap is not supported")
 		case nl.LWTUNNEL_IP6_OPTS:
 			err = fmt.Errorf("decoding OPTS in IP6tnlEncap is not supported")
 		}
