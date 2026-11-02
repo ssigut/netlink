@@ -1709,6 +1709,28 @@ func TestIP6tnlEncapEncode(t *testing.T) {
 	}
 }
 
+func TestIP6tnlEncapDecode(t *testing.T) {
+	e := &IP6tnlEncap{
+		ID:       7,
+		Dst:      net.ParseIP("2001:db8::1"),
+		Src:      net.ParseIP("2001:db8::2"),
+		Hoplimit: 64,
+		TC:       0x10,
+		Flags:    0x0004,
+	}
+	buf, err := e.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got IP6tnlEncap
+	if err := got.Decode(buf); err != nil {
+		t.Fatal(err)
+	}
+	if !e.Equal(&got) {
+		t.Errorf("decoded %s, want %s", &got, e)
+	}
+}
+
 func TestIP6tnlRouteAddDel(t *testing.T) {
 	_, err := RouteList(nil, FAMILY_V4)
 	if err != nil {
@@ -1734,8 +1756,12 @@ func TestIP6tnlRouteAddDel(t *testing.T) {
 	}
 
 	encap := IP6tnlEncap{
-		Dst: net.ParseIP("2001:db8::"),
-		Src: net.ParseIP("::"),
+		ID:       7,
+		Dst:      net.ParseIP("2001:db8::"),
+		Src:      net.ParseIP("::"),
+		Hoplimit: 64,
+		TC:       0x10,
+		Flags:    0x0004,
 	}
 
 	route := &Route{
@@ -1753,6 +1779,9 @@ func TestIP6tnlRouteAddDel(t *testing.T) {
 	}
 	if len(routes) != 1 {
 		t.Fatal("Route not added properly")
+	}
+	if !encap.Equal(routes[0].Encap) {
+		t.Fatalf("encap = %v, want %s", routes[0].Encap, &encap)
 	}
 
 	if err := RouteDel(route); err != nil {
