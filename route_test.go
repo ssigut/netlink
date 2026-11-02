@@ -3086,6 +3086,30 @@ func TestRouteNHID(t *testing.T) {
 	if routes[0].NHID != nh.ID {
 		t.Fatalf("Expected route NHID %d, got %d", nh.ID, routes[0].NHID)
 	}
+
+	// IPv6 prefix with the same nexthop: the kernel rejects RTA_OIF next to
+	// RTA_NH_ID for IPv6, even when it is zero.
+	_, dst6, err := net.ParseCIDR("2001:db8::/64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	route6 := Route{
+		Dst:  dst6,
+		NHID: nh.ID,
+	}
+	if err = RouteAdd(&route6); err != nil {
+		t.Fatal(err)
+	}
+	routes, err = RouteListFiltered(FAMILY_V6, &Route{Dst: dst6}, RT_FILTER_DST)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(routes) != 1 || routes[0].NHID != nh.ID {
+		t.Fatalf("Expected 1 route with NHID %d, got %+v", nh.ID, routes)
+	}
+	if err = RouteDel(&route6); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // findRtAttr returns the Data of the first top-level RtAttr of the given type
