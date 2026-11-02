@@ -1677,6 +1677,38 @@ func TestIP6tnlEncapEqual(t *testing.T) {
 	}
 }
 
+func TestIP6tnlEncapEncode(t *testing.T) {
+	e := &IP6tnlEncap{
+		ID:       7,
+		Dst:      net.ParseIP("2001:db8::1"),
+		Src:      net.ParseIP("2001:db8::2"),
+		Hoplimit: 64,
+		TC:       0x10,
+		Flags:    0x0004,
+	}
+	buf, err := e.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	attrs, err := nl.ParseRouteAttr(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := make(map[uint16][]byte)
+	for _, a := range attrs {
+		values[a.Attr.Type] = a.Value
+	}
+	for typ, want := range map[uint16][]byte{
+		nl.LWTUNNEL_IP6_TC:       {0x10},
+		nl.LWTUNNEL_IP6_HOPLIMIT: {64},
+		nl.LWTUNNEL_IP6_FLAGS:    {0x00, 0x04},
+	} {
+		if got := values[typ]; string(got) != string(want) {
+			t.Errorf("attribute %d = %x, want %x", typ, got, want)
+		}
+	}
+}
+
 func TestIP6tnlRouteAddDel(t *testing.T) {
 	_, err := RouteList(nil, FAMILY_V4)
 	if err != nil {

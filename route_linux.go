@@ -717,19 +717,22 @@ func (e *IP6tnlEncap) Encode() ([]byte, error) {
 	resSrc = append(resSrc, e.Src...)
 	final = append(final, resSrc...)
 
-	resTc := make([]byte, 5)
+	// Attributes are padded to 4 bytes: the length field counts only the
+	// header and the value, the next attribute starts at the next multiple
+	// of 4.
+	resTc := make([]byte, 8)
 	native.PutUint16(resTc, 5)
 	native.PutUint16(resTc[2:], nl.LWTUNNEL_IP6_TC)
 	resTc[4] = e.TC
 	final = append(final, resTc...)
 
-	resHops := make([]byte, 5)
+	resHops := make([]byte, 8)
 	native.PutUint16(resHops, 5)
 	native.PutUint16(resHops[2:], nl.LWTUNNEL_IP6_HOPLIMIT)
 	resHops[4] = e.Hoplimit
 	final = append(final, resHops...)
 
-	resFlags := make([]byte, 6)
+	resFlags := make([]byte, 8)
 	native.PutUint16(resFlags, 6)
 	native.PutUint16(resFlags[2:], nl.LWTUNNEL_IP6_FLAGS)
 	binary.BigEndian.PutUint16(resFlags[4:], e.Flags)
