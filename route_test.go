@@ -1652,6 +1652,89 @@ func TestMPLSRouteAddDel(t *testing.T) {
 
 }
 
+func TestIPtnlRouteAddDel(t *testing.T) {
+	t.Cleanup(setUpNetlinkTest(t))
+
+	for _, name := range []string{"dummy0", "dummy1"} {
+		if err := LinkAdd(&Dummy{LinkAttrs: LinkAttrs{Name: name}}); err != nil {
+			t.Fatal(err)
+		}
+		link, err := LinkByName(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := LinkSetUp(link); err != nil {
+			t.Fatal(err)
+		}
+	}
+	link0, err := LinkByName("dummy0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	link1, err := LinkByName("dummy1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	encap := func(dst string) *IPtnlEncap {
+		return &IPtnlEncap{
+			ID:    100,
+			Src:   net.ParseIP("192.0.2.1").To4(),
+			Dst:   net.ParseIP(dst).To4(),
+			TTL:   64,
+			TOS:   0x10,
+			Flags: 0x0004, // TUNNEL_KEY
+		}
+	}
+
+	_, dst, err := net.ParseCIDR("192.168.99.0/24")
+	if err != nil {
+		t.Fatal(err)
+	}
+	route := &Route{LinkIndex: link0.Attrs().Index, Dst: dst, Encap: encap("192.0.2.2")}
+	if err := RouteAdd(route); err != nil {
+		t.Fatalf("Cannot add route: %v", err)
+	}
+	routes, err := RouteListFiltered(FAMILY_V4, &Route{Dst: dst}, RT_FILTER_DST)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(routes) != 1 || !route.Encap.Equal(routes[0].Encap) {
+		t.Fatalf("routes = %+v, want one with encap %s", routes, route.Encap)
+	}
+	if err := RouteDel(route); err != nil {
+		t.Fatal(err)
+	}
+
+	// Every nexthop of a multipath route has an encapsulation of its own.
+	_, dst, err = net.ParseCIDR("192.168.98.0/24")
+	if err != nil {
+		t.Fatal(err)
+	}
+	route = &Route{Dst: dst, MultiPath: []*NexthopInfo{
+		{LinkIndex: link0.Attrs().Index, Encap: encap("192.0.2.2")},
+		{LinkIndex: link1.Attrs().Index, Encap: encap("192.0.2.3")},
+	}}
+	if err := RouteAdd(route); err != nil {
+		t.Fatalf("Cannot add multipath route: %v", err)
+	}
+	routes, err = RouteListFiltered(FAMILY_V4, &Route{Dst: dst}, RT_FILTER_DST)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(routes) != 1 || len(routes[0].MultiPath) != 2 {
+		t.Fatalf("routes = %+v, want one with two nexthops", routes)
+	}
+	for _, nh := range routes[0].MultiPath {
+		want := route.MultiPath[0].Encap
+		if nh.LinkIndex == link1.Attrs().Index {
+			want = route.MultiPath[1].Encap
+		}
+		if !want.Equal(nh.Encap) {
+			t.Errorf("nexthop via ifindex %d: encap %v, want %s", nh.LinkIndex, nh.Encap, want)
+		}
+	}
+}
+
 func TestIP6tnlEncapEqual(t *testing.T) {
 	a := &IP6tnlEncap{
 		ID:       7,
