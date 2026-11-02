@@ -748,7 +748,7 @@ func (e *IP6tnlEncap) Equal(x Encap) bool {
 		return false
 	}
 
-	if e.ID != o.ID || e.Flags != o.Flags || e.Hoplimit != o.Hoplimit || e.Src.Equal(o.Src) || e.Dst.Equal(o.Dst) || e.TC != o.TC {
+	if e.ID != o.ID || e.Flags != o.Flags || e.Hoplimit != o.Hoplimit || !e.Src.Equal(o.Src) || !e.Dst.Equal(o.Dst) || e.TC != o.TC {
 		return false
 	}
 	return true
