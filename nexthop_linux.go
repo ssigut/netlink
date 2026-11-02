@@ -338,7 +338,54 @@ func parseNhmsg(m []byte) (*Nexthop, error) {
 
 	decodeNexthopAttrs(nh, rtAttrs)
 
+	// The kernel sends NHA_ENCAP before NHA_ENCAP_TYPE, so the encapsulation
+	// is decoded once both are known.
+	var encap, encapType []byte
+	for _, attr := range rtAttrs {
+		switch attr.Type {
+		case unix.NHA_ENCAP:
+			encap = attr.Data
+		case unix.NHA_ENCAP_TYPE:
+			encapType = attr.Data
+		}
+	}
+	if len(encap) != 0 && len(encapType) >= 2 {
+		var e Encap
+		switch int(native.Uint16(encapType[0:2])) {
+		case nl.LWTUNNEL_ENCAP_MPLS:
+			e = &MPLSEncap{}
+		case nl.LWTUNNEL_ENCAP_IP6:
+			e = &IP6tnlEncap{}
+		case nl.LWTUNNEL_ENCAP_SEG6:
+			e = &SEG6Encap{}
+		}
+		if e != nil {
+			if err := e.Decode(encap); err != nil {
+				return nil, err
+			}
+			nh.Encap = e
+		}
+	}
+
 	return nh, nil
+}
+
+// encodeNexthopEncap returns the NHA_ENCAP_TYPE and NHA_ENCAP attributes of
+// nh's encapsulation, or none without one.
+func encodeNexthopEncap(nh *Nexthop) ([]*nl.RtAttr, error) {
+	if nh.Encap == nil {
+		return nil, nil
+	}
+	typ := make([]byte, 2)
+	native.PutUint16(typ, uint16(nh.Encap.Type()))
+	buf, err := nh.Encap.Encode()
+	if err != nil {
+		return nil, err
+	}
+	return []*nl.RtAttr{
+		nl.NewRtAttr(unix.NHA_ENCAP_TYPE, typ),
+		nl.NewRtAttr(unix.NHA_ENCAP|int(nl.NLA_F_NESTED), buf),
+	}, nil
 }
 
 func deriveFamilyFromNexthop(nh *Nexthop) uint8 {
@@ -378,6 +425,11 @@ func prepareNewNexthop(nh *Nexthop, req *nl.NetlinkRequest, msg *nl.Nhmsg) error
 		unix.NHA_GROUP_TYPE,
 		nl.NHA_RES_GROUP,
 	})...)
+	encap, err := encodeNexthopEncap(nh)
+	if err != nil {
+		return err
+	}
+	rtAttrs = append(rtAttrs, encap...)
 
 	msg.Family = deriveFamilyFromNexthop(nh)
 	msg.Protocol = uint8(nh.Protocol)
