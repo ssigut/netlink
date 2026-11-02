@@ -1229,7 +1229,13 @@ func (h *Handle) prepareRouteReq(route *Route, req *nl.NetlinkRequest, msg *nl.R
 		req.AddData(attr)
 	}
 
-	if (req.NlMsghdr.Type != unix.RTM_GETROUTE) || (req.NlMsghdr.Type == unix.RTM_GETROUTE && route.LinkIndex > 0) {
+	// A route through a nexthop object takes its device from the object;
+	// IPv6 rejects RTA_OIF next to RTA_NH_ID even when it is zero.
+	sendOif := req.NlMsghdr.Type != unix.RTM_GETROUTE || route.LinkIndex > 0
+	if route.NHID > 0 && route.LinkIndex == 0 {
+		sendOif = false
+	}
+	if sendOif {
 		b := make([]byte, 4)
 		native.PutUint32(b, uint32(route.LinkIndex))
 		req.AddData(nl.NewRtAttr(unix.RTA_OIF, b))
