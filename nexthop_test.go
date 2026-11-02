@@ -165,3 +165,48 @@ func TestNexthopAddListDelReplace(t *testing.T) {
 		t.Fatalf("Nexthop Gateway mismatch: expected %s, got %s", nh2.Gateway, resNH2.Gateway)
 	}
 }
+
+func TestNexthopEncap(t *testing.T) {
+	t.Cleanup(setUpMPLSNetlinkTest(t))
+
+	if err := LinkAdd(&Dummy{LinkAttrs: LinkAttrs{Name: "dummy0"}}); err != nil {
+		t.Fatal(err)
+	}
+	link, err := LinkByName("dummy0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := LinkSetUp(link); err != nil {
+		t.Fatal(err)
+	}
+
+	nh := &Nexthop{
+		ID:      1,
+		OIF:     uint32(link.Attrs().Index),
+		Gateway: net.ParseIP("fe80::1"),
+		Encap:   &MPLSEncap{Labels: []int{100, 200}},
+	}
+	if err := NexthopAdd(nh); err != nil {
+		t.Fatal(err)
+	}
+	nhs, err := NexthopList()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nhs) != 1 || nhs[0].Encap == nil || !nh.Encap.Equal(nhs[0].Encap) {
+		t.Fatalf("nexthops = %+v, want one with encap %s", nhs, nh.Encap)
+	}
+
+	// A replace changes the encapsulation of the nexthop in place.
+	nh.Encap = &MPLSEncap{Labels: []int{300}}
+	if err := NexthopReplace(nh); err != nil {
+		t.Fatal(err)
+	}
+	nhs, err = NexthopList()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nhs) != 1 || nhs[0].Encap == nil || !nh.Encap.Equal(nhs[0].Encap) {
+		t.Fatalf("nexthops = %+v, want one with encap %s", nhs, nh.Encap)
+	}
+}

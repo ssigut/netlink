@@ -43,6 +43,9 @@ type Nexthop struct {
 	Group          []NexthopGroupMember
 	GroupType      uint16
 	ResilientGroup *NexthopResilientGroup
+	// Encap is the lightweight tunnel encapsulation of a nexthop that is not
+	// a group (NHA_ENCAP_TYPE and NHA_ENCAP).
+	Encap Encap
 }
 
 func (h *Nexthop) String() string {
