@@ -1652,6 +1652,31 @@ func TestMPLSRouteAddDel(t *testing.T) {
 
 }
 
+func TestIP6tnlEncapEqual(t *testing.T) {
+	a := &IP6tnlEncap{
+		ID:       7,
+		Dst:      net.ParseIP("2001:db8::1"),
+		Src:      net.ParseIP("2001:db8::2"),
+		Hoplimit: 64,
+		TC:       0x10,
+		Flags:    0x0004,
+	}
+	same := *a
+	if !a.Equal(&same) {
+		t.Errorf("%s is not equal to itself", a)
+	}
+	for name, mutate := range map[string]func(*IP6tnlEncap){
+		"Dst": func(e *IP6tnlEncap) { e.Dst = net.ParseIP("2001:db8::3") },
+		"Src": func(e *IP6tnlEncap) { e.Src = net.ParseIP("2001:db8::3") },
+	} {
+		other := *a
+		mutate(&other)
+		if a.Equal(&other) {
+			t.Errorf("%s: %s is equal to %s", name, a, &other)
+		}
+	}
+}
+
 func TestIP6tnlRouteAddDel(t *testing.T) {
 	_, err := RouteList(nil, FAMILY_V4)
 	if err != nil {
