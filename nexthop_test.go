@@ -210,3 +210,41 @@ func TestNexthopEncap(t *testing.T) {
 		t.Fatalf("nexthops = %+v, want one with encap %s", nhs, nh.Encap)
 	}
 }
+
+func TestNexthopIPtnlEncap(t *testing.T) {
+	t.Cleanup(setUpNetlinkTest(t))
+
+	if err := LinkAdd(&Dummy{LinkAttrs: LinkAttrs{Name: "dummy0"}}); err != nil {
+		t.Fatal(err)
+	}
+	link, err := LinkByName("dummy0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := LinkSetUp(link); err != nil {
+		t.Fatal(err)
+	}
+
+	nh := &Nexthop{
+		ID:      1,
+		OIF:     uint32(link.Attrs().Index),
+		Gateway: net.ParseIP("fe80::1"),
+		Encap: &IPtnlEncap{
+			ID:    100,
+			Src:   net.ParseIP("192.0.2.1").To4(),
+			Dst:   net.ParseIP("192.0.2.2").To4(),
+			TTL:   64,
+			Flags: 0x0004, // TUNNEL_KEY
+		},
+	}
+	if err := NexthopAdd(nh); err != nil {
+		t.Fatal(err)
+	}
+	nhs, err := NexthopList()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nhs) != 1 || nhs[0].Encap == nil || !nh.Encap.Equal(nhs[0].Encap) {
+		t.Fatalf("nexthops = %+v, want one with encap %s", nhs, nh.Encap)
+	}
+}

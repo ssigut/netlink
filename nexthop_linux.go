@@ -354,6 +354,8 @@ func parseNhmsg(m []byte) (*Nexthop, error) {
 		switch int(native.Uint16(encapType[0:2])) {
 		case nl.LWTUNNEL_ENCAP_MPLS:
 			e = &MPLSEncap{}
+		case nl.LWTUNNEL_ENCAP_IP:
+			e = &IPtnlEncap{}
 		case nl.LWTUNNEL_ENCAP_IP6:
 			e = &IP6tnlEncap{}
 		case nl.LWTUNNEL_ENCAP_SEG6:
