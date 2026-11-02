@@ -754,6 +754,115 @@ func (e *IP6tnlEncap) Equal(x Encap) bool {
 	return true
 }
 
+// IPtnlEncap is an LWTUNNEL_ENCAP_IP encapsulation: the IPv4 tunnel
+// metadata that a flow-based tunnel device, or a program reading it, uses
+// for packets routed by the route. Flags holds TUNNEL_* flags as the
+// kernel's 16-bit representation (TUNNEL_KEY is 0x0004).
+type IPtnlEncap struct {
+	ID    uint64
+	Dst   net.IP
+	Src   net.IP
+	TTL   uint8
+	TOS   uint8
+	Flags uint16
+}
+
+func (e *IPtnlEncap) Type() int {
+	return nl.LWTUNNEL_ENCAP_IP
+}
+
+func (e *IPtnlEncap) Decode(buf []byte) error {
+	attrs, err := nl.ParseRouteAttr(buf)
+	if err != nil {
+		return err
+	}
+	for _, attr := range attrs {
+		switch attr.Attr.Type {
+		case nl.LWTUNNEL_IP_ID:
+			if len(attr.Value) < 8 {
+				return fmt.Errorf("IPtnlEncap: short ID attribute")
+			}
+			e.ID = binary.BigEndian.Uint64(attr.Value[0:8])
+		case nl.LWTUNNEL_IP_DST:
+			e.Dst = net.IP(append([]byte(nil), attr.Value...))
+		case nl.LWTUNNEL_IP_SRC:
+			e.Src = net.IP(append([]byte(nil), attr.Value...))
+		case nl.LWTUNNEL_IP_TTL:
+			e.TTL = attr.Value[0]
+		case nl.LWTUNNEL_IP_TOS:
+			e.TOS = attr.Value[0]
+		case nl.LWTUNNEL_IP_FLAGS:
+			if len(attr.Value) < 2 {
+				return fmt.Errorf("IPtnlEncap: short FLAGS attribute")
+			}
+			e.Flags = binary.BigEndian.Uint16(attr.Value[0:2])
+		case nl.LWTUNNEL_IP_OPTS:
+			return fmt.Errorf("decoding OPTS in IPtnlEncap is not supported")
+		}
+	}
+	return nil
+}
+
+// Encode pads every attribute to 4 bytes, as netlink requires.
+func (e *IPtnlEncap) Encode() ([]byte, error) {
+	var final []byte
+
+	id := make([]byte, 12)
+	native.PutUint16(id, 12)
+	native.PutUint16(id[2:], nl.LWTUNNEL_IP_ID)
+	binary.BigEndian.PutUint64(id[4:], e.ID)
+	final = append(final, id...)
+
+	for _, a := range []struct {
+		typ uint16
+		ip  net.IP
+	}{{nl.LWTUNNEL_IP_DST, e.Dst}, {nl.LWTUNNEL_IP_SRC, e.Src}} {
+		if a.ip == nil {
+			continue
+		}
+		ip4 := a.ip.To4()
+		if ip4 == nil {
+			return nil, fmt.Errorf("IPtnlEncap: %s is not an IPv4 address", a.ip)
+		}
+		attr := make([]byte, 4, 8)
+		native.PutUint16(attr, 8)
+		native.PutUint16(attr[2:], a.typ)
+		final = append(final, append(attr, ip4...)...)
+	}
+
+	for _, a := range []struct {
+		typ   uint16
+		value uint8
+	}{{nl.LWTUNNEL_IP_TTL, e.TTL}, {nl.LWTUNNEL_IP_TOS, e.TOS}} {
+		attr := make([]byte, 8)
+		native.PutUint16(attr, 5)
+		native.PutUint16(attr[2:], a.typ)
+		attr[4] = a.value
+		final = append(final, attr...)
+	}
+
+	flags := make([]byte, 8)
+	native.PutUint16(flags, 6)
+	native.PutUint16(flags[2:], nl.LWTUNNEL_IP_FLAGS)
+	binary.BigEndian.PutUint16(flags[4:], e.Flags)
+	final = append(final, flags...)
+
+	return final, nil
+}
+
+func (e *IPtnlEncap) String() string {
+	return fmt.Sprintf("ip id %d src %s dst %s ttl %d tos %d flags 0x%.4x", e.ID, e.Src, e.Dst, e.TTL, e.TOS, e.Flags)
+}
+
+func (e *IPtnlEncap) Equal(x Encap) bool {
+	o, ok := x.(*IPtnlEncap)
+	if !ok {
+		return false
+	}
+	return e.ID == o.ID && e.Dst.Equal(o.Dst) && e.Src.Equal(o.Src) &&
+		e.TTL == o.TTL && e.TOS == o.TOS && e.Flags == o.Flags
+}
+
 type Via struct {
 	AddrFamily int
 	Addr       net.IP
@@ -1497,6 +1606,11 @@ func deserializeRoute(m []byte) (Route, error) {
 						if err := e.Decode(encap.Value); err != nil {
 							return nil, nil, err
 						}
+					case nl.LWTUNNEL_ENCAP_IP:
+						e = &IPtnlEncap{}
+						if err := e.Decode(encap.Value); err != nil {
+							return nil, nil, err
+						}
 					}
 					info.Encap = e
 				}
@@ -1623,6 +1737,11 @@ func deserializeRoute(m []byte) (Route, error) {
 			}
 		case nl.LWTUNNEL_ENCAP_BPF:
 			e = &BpfEncap{}
+			if err := e.Decode(encap.Value); err != nil {
+				return route, err
+			}
+		case nl.LWTUNNEL_ENCAP_IP:
+			e = &IPtnlEncap{}
 			if err := e.Decode(encap.Value); err != nil {
 				return route, err
 			}
